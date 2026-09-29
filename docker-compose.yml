@@ -1,0 +1,18 @@
+services:
+  web:
+    build: .
+    container_name: TakeDone
+    restart: unless-stopped
+    ports:
+      - "8008:8008"
+    # Для горячей перезагрузки при разработке (код обновляется без пересборки):
+    volumes:
+      - .:/app
+      - sqlite_data:/app/data
+    env_file:
+      - .env
+    # Запуск с reload для локальной разработки:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8008", "--reload"]
+
+volumes:
+  sqlite_data:
