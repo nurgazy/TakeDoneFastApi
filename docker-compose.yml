@@ -1,18 +1,56 @@
 services:
-  web:
+  migration_runner:
     build: .
-    container_name: TakeDone
-    restart: unless-stopped
-    ports:
-      - "8008:8008"
-    # Для горячей перезагрузки при разработке (код обновляется без пересборки):
-    volumes:
-      - .:/app
-      - sqlite_data:/app/data
+    image: takedone_img:latest
+    container_name: takedone_migrations
     env_file:
       - .env
-    # Запуск с reload для локальной разработки:
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
+    volumes:
+      - .:/app
+    command: alembic upgrade head
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+
+  fastapi_app:
+    build: .
+    image: takedone_img:latest
+    container_name: TakeDone
+    ports:
+      - "8008:8008"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres_db:5432/${POSTGRES_DB}
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8008", "--reload"]
+    restart: unless-stopped
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      migration_runner:
+        condition: service_completed_successfully
+
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: takedone_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
-  sqlite_data:
+  postgres_data:
