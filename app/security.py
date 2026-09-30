@@ -1,20 +1,34 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _hash_password_sync(password: str) -> str:
+    # bcrypt принимает байты и пароль не длиннее 72 байт
+    pwd_bytes = password.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode("utf-8")
+
+
+def _verify_password_sync(plain_password: str, hashed_password: str) -> bool:
+    pwd_bytes = plain_password.encode("utf-8")[:72]
+    hash_bytes = hashed_password.encode("utf-8")
+    try:
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except (ValueError, TypeError):
+        return False
 
 
 async def hash_password(password: str) -> str:
-    return await asyncio.to_thread(pwd_context.hash, password[:72])
+    return await asyncio.to_thread(_hash_password_sync, password)
 
 
 async def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return await asyncio.to_thread(pwd_context.verify, plain_password[:72], hashed_password)
+    return await asyncio.to_thread(_verify_password_sync, plain_password, hashed_password)
 
 
 def _create_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
